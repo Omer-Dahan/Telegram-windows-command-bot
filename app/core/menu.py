@@ -27,6 +27,7 @@ NETFLIX = "🎬 Netflix"
 FILES = "📂 Files"
 CLIPBOARD = "✂ Clipboard"
 HELP = "💡 Help"
+PANIC = "🚨 Panic"
 
 LAYOUT = [
     [SYSTEM_INFO, POWER],
@@ -39,6 +40,7 @@ LAYOUT = [
     [VLC, NETFLIX],
     [FILES, CLIPBOARD],
     [HELP],
+    [PANIC],
 ]
 
 

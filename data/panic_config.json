@@ -1,0 +1,195 @@
+{
+  "enabled": true,
+  "silent_mode": false,
+  "test_mode": false,
+  "cooldown_seconds": 300,
+  "config_hmac": "3dba6c22b7c3c1a63299e68766998d6f54571f4c0e697025b782ab7ae0da6aa5",
+  "scoring": {
+    "enabled": true,
+    "decay_per_minute": 5,
+    "threshold_warning": 30,
+    "threshold_level1": 60,
+    "threshold_level2": 80,
+    "threshold_level3": 100,
+    "trigger_weights": {
+      "wifi_loss": 20,
+      "location_change": 40,
+      "usb_change": 30,
+      "power_disconnect": 15,
+      "bluetooth_loss": 20,
+      "dead_man_switch": 50,
+      "failed_login": 35,
+      "lid_open": 10,
+      "boot_source": 60,
+      "manual": 100
+    }
+  },
+  "grace_period": {
+    "default_seconds": 300,
+    "update_interval_seconds": 30,
+    "auto_cancel_on_resolve": true
+  },
+  "escalation": {
+    "l1_to_l2_delay_seconds": 480,
+    "l2_to_l3_delay_seconds": 1320,
+    "notify_on_transition": true,
+    "allow_manual_escalate": true
+  },
+  "triggers": {
+    "wifi_loss": {
+      "enabled": true,
+      "timeout_minutes": 5,
+      "trusted_ssids": [
+        "omer_w_5G 2"
+      ],
+      "grace_seconds": 0
+    },
+    "location_change": {
+      "enabled": false,
+      "ssid_change_threshold": 3,
+      "ip_change": true,
+      "poll_interval_seconds": 60,
+      "grace_seconds": 120
+    },
+    "usb_change": {
+      "enabled": true,
+      "trusted_device_ids": [
+        "USB\\ROOT_HUB30\\4&2C12E962&0&0",
+        "USB\\VID_174F&PID_2469\\0001",
+        "USB\\VID_A8A5&PID_2255\\D1K_251010B271_A72V1",
+        "USB\\VID_0781&PID_5591\\01017808E45C903445FC29FB721636BB4A984214288AFF31DC9A7727A4AA8DF6079E0000000000000000000088836A32001072009155810720B069F5",
+        "USB\\VID_05E3&PID_0610\\5&665FDBB&0&2",
+        "USB\\ROOT_HUB30\\4&76B7606&0&0",
+        "PCI\\VEN_8086&DEV_51ED&SUBSYS_385817AA&REV_01\\3&11583659&0&A0",
+        "USB\\VID_1EA7&PID_0066\\6&1CC84933&0&3",
+        "USB\\VID_214B&PID_7260\\5&665FDBB&0&1",
+        "USB\\VID_05E3&PID_0625\\5&2DF84CF0&0&2",
+        "PCI\\VEN_8086&DEV_A71E&SUBSYS_72708086&REV_00\\3&11583659&0&68"
+      ],
+      "alert_on_new": true,
+      "alert_on_remove_trusted": true,
+      "grace_seconds": 0
+    },
+    "power_disconnect": {
+      "enabled": true,
+      "grace_seconds": 600
+    },
+    "bluetooth_loss": {
+      "enabled": true,
+      "timeout_minutes": 3,
+      "trusted_devices": [],
+      "grace_seconds": 180
+    },
+    "dead_man_switch": {
+      "enabled": false,
+      "timeout_hours": 24,
+      "grace_seconds": 0
+    },
+    "failed_login": {
+      "enabled": true,
+      "threshold": 5,
+      "window_minutes": 10,
+      "grace_seconds": 0
+    },
+    "lid_open": {
+      "enabled": false,
+      "grace_seconds": 30
+    },
+    "boot_source": {
+      "enabled": false,
+      "grace_seconds": 0
+    },
+    "manual": {
+      "enabled": true,
+      "grace_seconds": 0
+    }
+  },
+  "actions": {
+    "level1": {
+      "telegram_alert": {
+        "enabled": true,
+        "include_screenshot": true,
+        "include_webcam": false
+      },
+      "lock_workstation": {
+        "enabled": true
+      }
+    },
+    "level2": {
+      "kill_processes": {
+        "enabled": false,
+        "process_list": [
+          "chrome.exe",
+          "firefox.exe",
+          "keepass.exe"
+        ]
+      },
+      "veracrypt_dismount": {
+        "enabled": false
+      },
+      "ram_clear": {
+        "enabled": false
+      },
+      "browser_cleanup": {
+        "enabled": false,
+        "browsers": [
+          "chrome",
+          "edge",
+          "firefox"
+        ]
+      },
+      "delete_temp": {
+        "enabled": false
+      },
+      "custom_script": {
+        "enabled": true,
+        "script_path": null
+      },
+      "forensic_snapshot": {
+        "enabled": true
+      }
+    },
+    "level3": {
+      "disable_network": {
+        "enabled": false
+      },
+      "hibernate": {
+        "enabled": false
+      },
+      "shutdown": {
+        "enabled": false,
+        "delay_seconds": 30
+      }
+    }
+  },
+  "hotkey": {
+    "enabled": false,
+    "combo": "<ctrl>+<alt>+<end>",
+    "action": "level1",
+    "require_confirm": false,
+    "debounce_seconds": 2
+  },
+  "offline_recovery": {
+    "watch_dir": "",
+    "usb_token_filename": "panic_recovery.json",
+    "failed_attempt_lockout_count": 5,
+    "lockout_duration_minutes": 30
+  },
+  "watchdog": {
+    "enabled": true,
+    "check_interval_seconds": 30,
+    "restart_on_failure": true,
+    "notify_on_restart": true
+  },
+  "safe_mode": {
+    "auto_enter_threshold": 5,
+    "auto_enter_window_minutes": 60
+  },
+  "forensics": {
+    "include_webcam": false,
+    "include_processes": true,
+    "include_screenshot": true,
+    "upload_to_telegram": true,
+    "keep_local_copies": 20
+  }
+}

@@ -25,10 +25,11 @@ from . import (
     files,                # 📂 Files, ls/cd/pwd/download
     clipboard,            # ✂ Clipboard, copy/paste
     shell,                # cmd/ps1/launch/url
+    panic,                # 🚨 Panic Mode / Anti-Theft Protection
 )
 
 ALL_FEATURES = [
     start_help, keys, macros, recorder, switcher, system, audio, brightness,
     screen, webcam, network, media, mouse, windows_proc, files,
-    clipboard, shell,
+    clipboard, shell, panic,
 ]
