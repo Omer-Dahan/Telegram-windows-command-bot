@@ -193,7 +193,7 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _safe_edit(q, _status_line(cfg, state), ui.main_menu(cfg))
 
     elif section == "refresh":
-        # Re-render whatever the current state implies = go to main menu
+        # Generic refresh fallback (each panel passes its own refresh cb now)
         cfg = config_store.load()
         state = state_machine.get_state()
         await _safe_edit(q, _status_line(cfg, state), ui.main_menu(cfg))
@@ -233,6 +233,18 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         cfg = config_store.load()
         state = state_machine.get_state()
         await _safe_edit(q, _status_line(cfg, state), ui.main_menu(cfg))
+
+    # ── Help (Telegraph link) ─────────────────────────────────────────────
+    elif section == "help":
+        from . import help as panic_help
+        url = await asyncio.to_thread(panic_help.get_help_url)
+        if url:
+            from telegram import InlineKeyboardButton as IB2, InlineKeyboardMarkup
+            kb = InlineKeyboardMarkup([[IB2("📖 Open Guide", url=url)],
+                                       [IB2("⬅️ Back", callback_data="panic:menu")]])
+            await _safe_edit(q, "📖 *Panic Mode Guide*\nTap to open the full guide:", kb)
+        else:
+            await q.answer("⚠️ Could not reach Telegraph. Check internet.", show_alert=True)
 
     # ── Score / State / Health panels ─────────────────────────────────────
     elif section == "score":
@@ -353,6 +365,54 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             text, kb = ui.trigger_cfg_menu("usb_change")
             await _safe_edit(q, text, kb)
 
+        elif sub == "threshold":
+            # panic:trg:threshold:failed_login:5
+            trig_name = parts[3] if len(parts) > 3 else "failed_login"
+            val = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 5
+            config_store.set_trigger_field(trig_name, "threshold", val)
+            text, kb = ui.trigger_cfg_menu(trig_name)
+            await _safe_edit(q, text, kb)
+
+        elif sub == "window":
+            # panic:trg:window:failed_login:10
+            trig_name = parts[3] if len(parts) > 3 else "failed_login"
+            val = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else 10
+            config_store.set_trigger_field(trig_name, "window_minutes", val)
+            text, kb = ui.trigger_cfg_menu(trig_name)
+            await _safe_edit(q, text, kb)
+
+        elif sub == "lid_mode":
+            mode = parts[3] if len(parts) > 3 else "open"
+            config_store.set_trigger_field("lid_open", "detect_mode", mode)
+            monitors.start_all(app)
+            text, kb = ui.trigger_cfg_menu("lid_open")
+            await _safe_edit(q, text, kb)
+
+        elif sub == "scan_bt":
+            await q.answer("🔍 Scanning BT devices…")
+            bt_list = await asyncio.to_thread(_get_bt_devices)
+            # Store scanned devices in session for add_bt_dev callback
+            _AWAITING[chat_id] = {"type": "bt_scan_result", "devices": bt_list}
+            text, kb = ui.bt_scan_results(bt_list)
+            await _safe_edit(q, text, kb)
+
+        elif sub == "add_bt_dev":
+            # panic:trg:add_bt_dev:3
+            idx = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 0
+            session = _AWAITING.get(chat_id)
+            if isinstance(session, dict) and session.get("type") == "bt_scan_result":
+                devices = session.get("devices", [])
+                if 0 <= idx < len(devices):
+                    dev = devices[idx]
+                    t_cfg = config_store.get_trigger("bluetooth_loss")
+                    devs = list(t_cfg.get("trusted_devices", []))
+                    if dev not in devs:
+                        devs.append(dev)
+                        config_store.set_trigger_field("bluetooth_loss", "trusted_devices", devs)
+                    await q.answer(f"✅ Added: {dev[:30]}", show_alert=True)
+            text, kb = ui.trigger_cfg_menu("bluetooth_loss")
+            await _safe_edit(q, text, kb)
+
         elif sub == "test":
             name = parts[3] if len(parts) > 3 else "manual"
             from . import service as panic_service
@@ -389,12 +449,20 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         elif sub == "cfg":
             level_key = parts[3] if len(parts) > 3 else "level1"
             action_name = parts[4] if len(parts) > 4 else ""
-            from telegram import InlineKeyboardButton as IB, InlineKeyboardMarkup
-            kb = InlineKeyboardMarkup([[IB("⬅️ Back", callback_data="panic:act:menu"),
-                                        IB("🏠 Home", callback_data="panic:menu")]])
-            await _safe_edit(q,
-                f"⚙️ *{action_name}* config\n_(individual action config available after trigger setup)_",
-                kb)
+            if action_name == "custom_script":
+                text, kb = ui.custom_script_cfg()
+                await _safe_edit(q, text, kb)
+            else:
+                from telegram import InlineKeyboardButton as IB2, InlineKeyboardMarkup
+                kb = InlineKeyboardMarkup([[IB2("⬅️ Back", callback_data=f"panic:act:lvl:{level_key}"),
+                                            IB2("🏠 Home", callback_data="panic:menu")]])
+                await _safe_edit(q,
+                    f"⚙️ *{action_name.replace('_', chr(92) + '_')}* — no extra config",
+                    kb)
+
+        elif sub == "upload_script":
+            _AWAITING[chat_id] = "script"
+            await _safe_edit(q, "📤 Send a `.ps1`, `.cmd` or `.bat` file now:")
 
     # ── Escalation ────────────────────────────────────────────────────────
     elif section == "esc":
@@ -612,6 +680,8 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # ── Multi-step text input (group=-1) ─────────────────────────────────────────
 
 async def _on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:   # guard: callback queries arrive here too in group=-1
+        return
     if not is_owner_msg(update):
         return
     chat_id = update.effective_chat.id
@@ -663,6 +733,8 @@ async def _on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ── Script upload (group=-1) ──────────────────────────────────────────────────
 
 async def _on_script_upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message:
+        return
     if not is_owner_msg(update):
         return
     chat_id = update.effective_chat.id
@@ -714,24 +786,23 @@ async def _do_recovery(app: Application, notify_chat_id: int | None = None) -> N
 
 
 async def _reapply_lockdown(app: Application) -> None:
-    """Called on startup if LOCKDOWN state was persisted."""
-    import ctypes
-    try:
-        ctypes.windll.user32.LockWorkStation()
-    except Exception:
-        pass
+    """Called on startup if LOCKDOWN state was persisted.
 
+    Deliberately does NOT re-lock the screen or re-disable adapters automatically.
+    The owner may be restarting the bot intentionally (e.g. after a crash or update).
+    We only notify — the owner must send /recover to exit, or do nothing to stay in lockdown.
+    Network adapters that were disabled remain disabled at the OS level already;
+    no need to call disable again, and calling lock_screen would be disruptive.
+    """
     adapters = logs.load_disabled_adapters()
-    if adapters:
-        from . import service
-        await asyncio.to_thread(service.disable_network_adapters)
+    adapter_note = f"\nDisabled adapters: {', '.join(adapters)}" if adapters else ""
 
     for cid in CONFIG.all_owner_chat_ids:
         try:
             await app.bot.send_message(
                 cid,
                 "🔒 *Bot restarted in LOCKDOWN state.*\n"
-                "Send /recover to restore normal operation.",
+                "Send /recover to restore normal operation." + adapter_note,
                 parse_mode="Markdown",
             )
         except Exception:
@@ -744,6 +815,24 @@ def _get_current_ssid() -> str | None:
     """Get connected Wi-Fi profile name using Location-permission-free method."""
     from .monitors import _get_wifi_profile
     return _get_wifi_profile()
+
+
+def _get_bt_devices() -> list[str]:
+    """Return list of paired Bluetooth device names via PowerShell."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             "Get-PnpDevice -Class Bluetooth | "
+             "Where-Object {$_.Status -eq 'OK' -and $_.FriendlyName -ne $null} | "
+             "Select-Object -ExpandProperty FriendlyName | Sort-Object -Unique"],
+            capture_output=True, text=True, timeout=10,
+            **config_store.subprocess_kwargs(),
+        )
+        return [line.strip() for line in r.stdout.splitlines()
+                if line.strip() and line.strip().lower() not in ("bluetooth", "generic")]
+    except Exception:
+        return []
 
 
 def _get_usb_devices() -> list[str]:

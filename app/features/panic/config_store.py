@@ -66,7 +66,7 @@ _DEFAULT: dict = {
         "bluetooth_loss":   {"enabled": False, "timeout_minutes": 3,  "trusted_devices": [],      "grace_seconds": 180},
         "dead_man_switch":  {"enabled": False, "timeout_hours": 24,   "grace_seconds": 0},
         "failed_login":     {"enabled": False, "threshold": 5,        "window_minutes": 10,       "grace_seconds": 0},
-        "lid_open":         {"enabled": False, "grace_seconds": 30},
+        "lid_open":         {"enabled": False, "grace_seconds": 30, "detect_mode": "open"},
         "boot_source":      {"enabled": False, "grace_seconds": 0},
         "manual":           {"enabled": True,  "grace_seconds": 0},
     },

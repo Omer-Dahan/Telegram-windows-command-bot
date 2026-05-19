@@ -546,7 +546,9 @@ def _monitor_lid(app: "Application", stop_ev: threading.Event) -> None:
             if not cfg.get("enabled", False):
                 continue
 
-            # Use display count as proxy for lid state (lid open = more displays)
+            # Use display count as proxy for lid state:
+            #   lid opens  → more displays  (count increases)
+            #   lid closes → fewer displays (count decreases)
             try:
                 import ctypes
                 count = ctypes.windll.user32.GetSystemMetrics(80)  # SM_CMONITORS
@@ -557,8 +559,12 @@ def _monitor_lid(app: "Application", stop_ev: threading.Event) -> None:
                 last_count = count
                 continue
 
-            if count > last_count:
-                log.info("PANIC monitor_lid: display count increased %d→%d", last_count, count)
+            mode = cfg.get("detect_mode", "open")
+            if mode == "open" and count > last_count:
+                log.info("PANIC monitor_lid: lid opened (%d→%d displays)", last_count, count)
+                _dispatch_trigger(app, "lid_open")
+            elif mode == "close" and count < last_count:
+                log.info("PANIC monitor_lid: lid closed (%d→%d displays)", last_count, count)
                 _dispatch_trigger(app, "lid_open")
 
             last_count = count

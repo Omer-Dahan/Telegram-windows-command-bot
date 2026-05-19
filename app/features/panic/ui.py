@@ -19,12 +19,21 @@ def _mk(*rows) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(list(rows))
 
 
-def _nav(back: str | None = None) -> list[IB]:
+def _esc(text: str) -> str:
+    """Escape MarkdownV1 special chars in user-provided strings (SSIDs, paths, etc.)."""
+    for ch in ("_", "*", "`", "["):
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+
+def _nav(back: str | None = None, refresh: str | None = None) -> list[IB]:
+    """Back = one level up.  Home = always main menu.  Refresh = re-render current panel."""
     btns = []
     if back:
         btns.append(IB("⬅️ Back", callback_data=back))
     btns.append(IB("🏠 Home", callback_data="panic:menu"))
-    btns.append(IB("🔄 Refresh", callback_data="panic:refresh"))
+    if refresh:
+        btns.append(IB("🔄", callback_data=refresh))
     return btns
 
 
@@ -75,6 +84,7 @@ def main_menu(cfg: dict | None = None) -> InlineKeyboardMarkup:
          IB("🔇 Silent: " + ("ON" if silent else "OFF"),
             callback_data="panic:silent:off" if silent else "panic:silent:on"),
          IB("⚡ Trigger!", callback_data="panic:manual")],
+        [IB("📖 מדריך / Guide", callback_data="panic:help")],
     )
 
 
@@ -149,7 +159,7 @@ def health_panel() -> tuple[str, InlineKeyboardMarkup]:
             btns.append([IB(f"🔄 Restart {d}", callback_data=f"panic:watchdog:restart:{d}")])
 
     btns.append([IB("🔄 Restart All Monitors", callback_data="panic:watchdog:restart_all")])
-    btns.append(_nav("panic:menu"))
+    btns.append(_nav("panic:menu", refresh="panic:health"))
     return "\n".join(lines), _mk(*btns)
 
 
@@ -186,7 +196,7 @@ def triggers_menu(cfg: dict | None = None) -> tuple[str, InlineKeyboardMarkup]:
             row = []
     if row:
         rows.append(row)
-    rows.append(_nav("panic:menu"))
+    rows.append(_nav("panic:menu", refresh="panic:trg:menu"))
     return "🎯 *Configure Triggers*\nTap a trigger to configure it.", _mk(*rows)
 
 
@@ -195,21 +205,62 @@ def trigger_cfg_menu(name: str) -> tuple[str, InlineKeyboardMarkup]:
     label = _TRIGGER_LABELS.get(name, name)
     enabled = cfg.get("enabled", False)
     grace = cfg.get("grace_seconds", 300)
-    timeout = cfg.get("timeout_minutes", cfg.get("timeout_hours", 0))
-    trusted_ssids = cfg.get("trusted_ssids", [])
-    trusted_bt = cfg.get("trusted_devices", [])
-    trusted_usb = cfg.get("trusted_device_ids", [])
+    trusted_ssids: list[str] = cfg.get("trusted_ssids", [])
+    trusted_bt: list[str]    = cfg.get("trusted_devices", [])
+    trusted_usb: list[str]   = cfg.get("trusted_device_ids", [])
 
     lines = [f"⚙️ *{label}*\n",
              f"Status: {'✅ Enabled' if enabled else '❌ Disabled'}",
-             f"Grace: {grace}s"]
+             f"Grace period: {grace}s"]
 
-    if timeout:
-        lines.append(f"Timeout: {timeout} {'min' if 'minutes' in str(cfg) else 'hrs'}")
+    # Timeout
+    if name in ("wifi_loss", "bluetooth_loss"):
+        t_min = cfg.get("timeout_minutes", 5)
+        lines.append(f"Timeout (until trigger): {t_min} min")
+    if name == "dead_man_switch":
+        t_hrs = cfg.get("timeout_hours", 24)
+        lines.append(f"Timeout (no heartbeat): {t_hrs} hr")
+
+    # Failed login
+    if name == "failed_login":
+        threshold = cfg.get("threshold", 5)
+        window    = cfg.get("window_minutes", 10)
+        lines.append(f"Threshold: {threshold} failed attempts in {window} min")
+
+    # Lid mode
+    if name == "lid_open":
+        mode = cfg.get("detect_mode", "open")
+        lines.append(f"Detect: {'🔓 Lid Opens' if mode == 'open' else '🔒 Lid Closes'}")
+
+    # Trusted SSID list — show names in message text
+    if name == "wifi_loss":
+        if trusted_ssids:
+            lines.append(f"\nTrusted SSIDs ({len(trusted_ssids)}):")
+            for ssid in trusted_ssids[:8]:
+                lines.append(f"  • {_esc(ssid)}")
+        else:
+            lines.append("\nTrusted SSIDs: _(none — add below)_")
+
+    # Trusted BT list — show names in message text
+    if name == "bluetooth_loss":
+        if trusted_bt:
+            lines.append(f"\nTrusted BT devices ({len(trusted_bt)}):")
+            for dev in trusted_bt[:8]:
+                lines.append(f"  • {_esc(dev)}")
+        else:
+            lines.append("\nTrusted BT devices: _(none — scan below)_")
+
+    # Trusted USB list
+    if name == "usb_change":
+        if trusted_usb:
+            lines.append(f"\nTrusted USB IDs ({len(trusted_usb)}):")
+            for uid in trusted_usb[:5]:
+                lines.append(f"  • `{uid[:40]}`")
+        else:
+            lines.append("\nTrusted USB IDs: _(none)_")
 
     rows: list[list[IB]] = []
-    tog_cb = f"panic:trg:toggle:{name}"
-    rows.append([IB(f"{'🔴 Disable' if enabled else '🟢 Enable'}", callback_data=tog_cb)])
+    rows.append([IB(f"{'🔴 Disable' if enabled else '🟢 Enable'}", callback_data=f"panic:trg:toggle:{name}")])
 
     # Grace presets
     rows.append([
@@ -220,7 +271,7 @@ def trigger_cfg_menu(name: str) -> tuple[str, InlineKeyboardMarkup]:
         IB("10m",       callback_data=f"panic:trg:grace:{name}:600"),
     ])
 
-    # Timeout presets (if applicable)
+    # Timeout presets
     if name in ("wifi_loss", "bluetooth_loss"):
         rows.append([
             IB("Timeout: 1m",  callback_data=f"panic:trg:timeout:{name}:1"),
@@ -229,28 +280,48 @@ def trigger_cfg_menu(name: str) -> tuple[str, InlineKeyboardMarkup]:
             IB("15m",          callback_data=f"panic:trg:timeout:{name}:15"),
         ])
 
-    # Trusted lists
+    # Failed login threshold presets
+    if name == "failed_login":
+        rows.append([
+            IB("Threshold: 3",  callback_data="panic:trg:threshold:failed_login:3"),
+            IB("5",             callback_data="panic:trg:threshold:failed_login:5"),
+            IB("10",            callback_data="panic:trg:threshold:failed_login:10"),
+            IB("20",            callback_data="panic:trg:threshold:failed_login:20"),
+        ])
+        rows.append([
+            IB("Window: 5m",  callback_data="panic:trg:window:failed_login:5"),
+            IB("10m",         callback_data="panic:trg:window:failed_login:10"),
+            IB("30m",         callback_data="panic:trg:window:failed_login:30"),
+        ])
+
+    # Lid open/close mode
+    if name == "lid_open":
+        rows.append([
+            IB("🔓 Detect Open",  callback_data="panic:trg:lid_mode:open"),
+            IB("🔒 Detect Close", callback_data="panic:trg:lid_mode:close"),
+        ])
+
+    # Trusted SSID management
     if name == "wifi_loss":
-        lines.append(f"\nTrusted SSIDs ({len(trusted_ssids)}):")
         for i, ssid in enumerate(trusted_ssids[:5]):
-            rows.append([IB(f"➖ {ssid}", callback_data=f"panic:trg:del_ssid:{i}")])
+            rows.append([IB(f"➖ Remove: {ssid[:30]}", callback_data=f"panic:trg:del_ssid:{i}")])
         rows.append([IB("➕ Add current SSID", callback_data="panic:trg:add_cur_ssid"),
-                     IB("➕ Type SSID", callback_data="panic:trg:add_ssid")])
+                     IB("➕ Type SSID",        callback_data="panic:trg:add_ssid")])
 
+    # Trusted BT management — scan instead of type
     if name == "bluetooth_loss":
-        lines.append(f"\nTrusted BT Devices ({len(trusted_bt)}):")
         for i, dev in enumerate(trusted_bt[:5]):
-            rows.append([IB(f"➖ {dev}", callback_data=f"panic:trg:del_bt:{i}")])
-        rows.append([IB("➕ Add BT device", callback_data="panic:trg:add_bt")])
+            rows.append([IB(f"➖ Remove: {dev[:30]}", callback_data=f"panic:trg:del_bt:{i}")])
+        rows.append([IB("🔍 Scan BT devices", callback_data="panic:trg:scan_bt")])
 
+    # Trusted USB management
     if name == "usb_change":
-        lines.append(f"\nTrusted USB IDs ({len(trusted_usb)}):")
         for i, uid in enumerate(trusted_usb[:5]):
-            rows.append([IB(f"➖ {uid[:20]}…", callback_data=f"panic:trg:del_usb:{i}")])
+            rows.append([IB(f"➖ Remove #{i+1}", callback_data=f"panic:trg:del_usb:{i}")])
         rows.append([IB("➕ Add current USBs", callback_data="panic:trg:add_usb")])
 
     rows.append([IB("🧪 Test trigger", callback_data=f"panic:trg:test:{name}")])
-    rows.append(_nav("panic:trg:menu"))
+    rows.append(_nav("panic:trg:menu", refresh=f"panic:trg:cfg:{name}"))
     return "\n".join(lines), _mk(*rows)
 
 
@@ -302,7 +373,7 @@ def actions_menu(level_key: str = "level1", cfg: dict | None = None) -> tuple[st
         ]
         rows.append(row)
 
-    rows.append(_nav("panic:menu"))
+    rows.append(_nav("panic:menu", refresh=f"panic:act:lvl:{level_key}"))
     level_num = level_key[-1]
     return f"🔒 *Level {level_num} Actions*", _mk(*rows)
 
@@ -346,7 +417,7 @@ def escalation_menu() -> tuple[str, InlineKeyboardMarkup]:
          _tog(allow, "Manual escalate", "Manual escalate",
               "panic:esc:manual:on", "panic:esc:manual:off")],
     ]
-    all_rows = manual_rows + delay_rows + [_nav("panic:menu")]
+    all_rows = manual_rows + delay_rows + [_nav("panic:menu", refresh="panic:esc:menu")]
     return text, _mk(*all_rows)
 
 
@@ -374,7 +445,7 @@ def logs_panel(page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     if page < pages - 1:
         nav_row.append(IB("▶️", callback_data=f"panic:logs:{page + 1}"))
 
-    rows = [_nav("panic:menu")]
+    rows = [_nav("panic:menu", refresh=f"panic:logs:{page}")]
     if nav_row:
         rows.insert(0, nav_row)
     rows.insert(0, [IB("📊 Analytics", callback_data="panic:logs:analytics"),
@@ -403,8 +474,55 @@ def forensics_panel() -> tuple[str, InlineKeyboardMarkup]:
         rows.append([IB(f"📤 Send #{i + 1}", callback_data=f"panic:forensics:send:{i}")])
     if not snaps:
         lines.append("_No snapshots yet._")
-    rows.append(_nav("panic:menu"))
+    rows.append(_nav("panic:menu", refresh="panic:forensics:list"))
     return "\n".join(lines), _mk(*rows)
+
+
+# ── Custom script config ───────────────────────────────────────────────────────
+
+def custom_script_cfg() -> tuple[str, InlineKeyboardMarkup]:
+    """Shows current script path and allows uploading a new script file."""
+    from pathlib import Path
+    from ...core.config import DATA_DIR
+    a_cfg = config_store.get_action("level2", "custom_script")
+    script_path = a_cfg.get("script_path")
+    enabled = a_cfg.get("enabled", False)
+
+    if script_path and Path(script_path).exists():
+        size = Path(script_path).stat().st_size
+        name_line = f"File: `{Path(script_path).name}` ({size} bytes)"
+    else:
+        name_line = "No script uploaded yet."
+
+    text = (
+        f"📜 *Custom Script*\n\n"
+        f"Status: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+        f"{name_line}\n\n"
+        "To upload: tap *Upload Script* then send a `.ps1`, `.cmd` or `.bat` file to the chat."
+    )
+    return text, _mk(
+        [IB("📤 Upload Script", callback_data="panic:act:upload_script")],
+        [_tog(enabled, "Enabled", "Disabled",
+              "panic:act:toggle:level2:custom_script",
+              "panic:act:toggle:level2:custom_script")],
+        _nav("panic:act:lvl:level2", refresh="panic:act:cfg:level2:custom_script"),
+    )
+
+
+# ── Bluetooth scan results ─────────────────────────────────────────────────────
+
+def bt_scan_results(devices: list[str]) -> tuple[str, InlineKeyboardMarkup]:
+    """Show discovered BT devices as selectable buttons."""
+    if not devices:
+        text = "📱 *Bluetooth Scan*\n\n_No paired BT devices found._"
+        return text, _mk(_nav("panic:trg:cfg:bluetooth_loss"))
+
+    text = f"📱 *Bluetooth Scan* — {len(devices)} device(s) found\nTap to add to trusted list:"
+    rows: list[list[IB]] = []
+    for i, dev in enumerate(devices[:8]):
+        rows.append([IB(f"➕ {dev[:40]}", callback_data=f"panic:trg:add_bt_dev:{i}")])
+    rows.append(_nav("panic:trg:cfg:bluetooth_loss"))
+    return text, _mk(*rows)
 
 
 # ── Hotkey config ─────────────────────────────────────────────────────────────
@@ -426,7 +544,7 @@ def hotkey_menu() -> tuple[str, InlineKeyboardMarkup]:
         [_tog(enabled, "Enabled", "Disabled", "panic:hotkey:on", "panic:hotkey:off")],
         [IB("Set Combo", callback_data="panic:hotkey:set_combo"),
          IB("🧪 Test", callback_data="panic:hotkey:test")],
-        _nav("panic:menu"),
+        _nav("panic:menu", refresh="panic:hotkey:cfg"),
     )
 
 
@@ -448,7 +566,7 @@ def offline_recovery_menu() -> tuple[str, InlineKeyboardMarkup]:
     return text, _mk(
         [IB("🔑 Set Recovery PIN", callback_data="panic:offline:setpin"),
          IB("📁 Set Watch Dir", callback_data="panic:offline:setdir")],
-        _nav("panic:menu"),
+        _nav("panic:menu", refresh="panic:offline:cfg"),
     )
 
 
@@ -475,7 +593,7 @@ def settings_menu() -> tuple[str, InlineKeyboardMarkup]:
          IB("5m",            callback_data="panic:cooldown:300"),
          IB("10m",           callback_data="panic:cooldown:600"),
          IB("30m",           callback_data="panic:cooldown:1800")],
-        _nav("panic:menu"),
+        _nav("panic:menu", refresh="panic:settings"),
     )
 
 
@@ -512,5 +630,5 @@ def safe_mode_panel() -> tuple[str, InlineKeyboardMarkup]:
         "Only Telegram alerts are sent — no destructive actions.\n\n"
         "Tap below to exit safe mode.",
         _mk([IB("🔓 Exit Safe Mode", callback_data="panic:safe:off")],
-            _nav("panic:menu")),
+            _nav("panic:menu", refresh="panic:state")),
     )

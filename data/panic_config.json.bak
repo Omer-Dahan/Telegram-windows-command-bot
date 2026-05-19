@@ -1,9 +1,9 @@
 {
   "enabled": true,
-  "silent_mode": false,
+  "silent_mode": true,
   "test_mode": false,
   "cooldown_seconds": 300,
-  "config_hmac": "9771130dec12604fffbeec365a9266c780783f0533782941d7017f69dd866641",
+  "config_hmac": "93c6236939e9d54210ee72a34992e6b4d82d07ccee3f3ab47f78a46cdc856ce2",
   "scoring": {
     "enabled": true,
     "decay_per_minute": 5,
@@ -75,7 +75,7 @@
       "grace_seconds": 600
     },
     "bluetooth_loss": {
-      "enabled": false,
+      "enabled": true,
       "timeout_minutes": 3,
       "trusted_devices": [],
       "grace_seconds": 180
@@ -93,7 +93,8 @@
     },
     "lid_open": {
       "enabled": false,
-      "grace_seconds": 30
+      "grace_seconds": 30,
+      "detect_mode": "open"
     },
     "boot_source": {
       "enabled": false,
@@ -117,7 +118,7 @@
     },
     "level2": {
       "kill_processes": {
-        "enabled": false,
+        "enabled": true,
         "process_list": [
           "chrome.exe",
           "firefox.exe",
@@ -128,7 +129,7 @@
         "enabled": false
       },
       "ram_clear": {
-        "enabled": false
+        "enabled": true
       },
       "browser_cleanup": {
         "enabled": false,
@@ -139,10 +140,10 @@
         ]
       },
       "delete_temp": {
-        "enabled": false
+        "enabled": true
       },
       "custom_script": {
-        "enabled": true,
+        "enabled": false,
         "script_path": null
       },
       "forensic_snapshot": {
@@ -191,5 +192,6 @@
     "include_screenshot": true,
     "upload_to_telegram": true,
     "keep_local_copies": 20
-  }
+  },
+  "_help_url": "https://telegra.ph/Panic-Mode--Guide-מדריך-05-19"
 }
