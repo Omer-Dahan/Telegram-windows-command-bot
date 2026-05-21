@@ -3,7 +3,7 @@
   "silent_mode": true,
   "test_mode": false,
   "cooldown_seconds": 300,
-  "config_hmac": "85fe997c448c7d7533c7bc4a225f778371c797725c58564556fd7d73b84f5872",
+  "config_hmac": "d516c7008a5c5141cf1d17efaa359547ff12d074729f61670a8a393d7aed57f4",
   "scoring": {
     "enabled": true,
     "decay_per_minute": 5,
@@ -92,9 +92,9 @@
       "grace_seconds": 0
     },
     "lid_open": {
-      "enabled": false,
-      "grace_seconds": 30,
-      "detect_mode": "open"
+      "enabled": true,
+      "grace_seconds": 0,
+      "detect_mode": "close"
     },
     "boot_source": {
       "enabled": false,

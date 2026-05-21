@@ -1,9 +1,9 @@
 {
   "enabled": true,
   "silent_mode": true,
-  "test_mode": false,
+  "test_mode": true,
   "cooldown_seconds": 300,
-  "config_hmac": "93c6236939e9d54210ee72a34992e6b4d82d07ccee3f3ab47f78a46cdc856ce2",
+  "config_hmac": "c1207dc6cb5543ee6afe98b999da4af442872312039b9e46819b51845e0602d4",
   "scoring": {
     "enabled": true,
     "decay_per_minute": 5,
@@ -92,9 +92,9 @@
       "grace_seconds": 0
     },
     "lid_open": {
-      "enabled": false,
-      "grace_seconds": 30,
-      "detect_mode": "open"
+      "enabled": true,
+      "grace_seconds": 0,
+      "detect_mode": "close"
     },
     "boot_source": {
       "enabled": false,
@@ -118,7 +118,7 @@
     },
     "level2": {
       "kill_processes": {
-        "enabled": true,
+        "enabled": false,
         "process_list": [
           "chrome.exe",
           "firefox.exe",

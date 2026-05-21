@@ -21,6 +21,7 @@ from telegram import Update
 from telegram.error import BadRequest
 from telegram.ext import (
     Application,
+    ApplicationHandlerStop,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
@@ -671,10 +672,17 @@ async def _on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             text, kb = ui.recover_confirm()
             await _safe_edit(q, text, kb)
         elif len(parts) > 2 and parts[2] == "confirm":
-            await _do_recovery(app, chat_id)
-            cfg = config_store.load()
-            state = state_machine.get_state()
-            await _safe_edit(q, "✅ Recovery complete.", ui.main_menu(cfg))
+            if emergency_config.has_pin():
+                if emergency_config.is_locked_out():
+                    await _safe_edit(q, "🔒 PIN locked out due to too many failed attempts. Try again in 30 minutes.")
+                    return
+                _AWAITING[chat_id] = "recovery_pin_verify"
+                await _safe_edit(q, "🔑 Enter your recovery PIN to confirm:")
+            else:
+                await _do_recovery(app, chat_id)
+                cfg = config_store.load()
+                state = state_machine.get_state()
+                await _safe_edit(q, "✅ Recovery complete.", ui.main_menu(cfg))
 
 
 # ── Multi-step text input (group=-1) ─────────────────────────────────────────
@@ -711,9 +719,26 @@ async def _on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif awaiting == "recovery_pin":
         if len(text) < 4:
             await update.message.reply_text("❌ PIN must be at least 4 characters.")
-            return
+            raise ApplicationHandlerStop
         await asyncio.to_thread(emergency_config.set_pin, text)
         await update.message.reply_text("✅ Recovery PIN set successfully.")
+
+    elif awaiting == "recovery_pin_verify":
+        if emergency_config.is_locked_out():
+            await update.message.reply_text("🔒 PIN locked out due to too many failed attempts. Try again in 30 minutes.")
+            raise ApplicationHandlerStop
+        ok = await asyncio.to_thread(emergency_config.verify_pin, text)
+        if ok:
+            await _do_recovery(context.application, chat_id)
+        else:
+            em = emergency_config.load()
+            attempts = em.get("failed_pin_attempts", 0)
+            if emergency_config.is_locked_out():
+                await update.message.reply_text("🔒 Too many failed attempts. PIN locked out for 30 minutes.")
+            else:
+                remaining = max(0, 5 - attempts)
+                await update.message.reply_text(f"❌ Wrong PIN. {remaining} attempt(s) remaining.")
+                _AWAITING[chat_id] = "recovery_pin_verify"
 
     elif awaiting == "watch_dir":
         cfg = config_store.load()
@@ -728,6 +753,8 @@ async def _on_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         config_store.save(cfg)
         hotkey.restart(context.application)
         await update.message.reply_text(f"✅ Hotkey combo set to: {text}")
+
+    raise ApplicationHandlerStop  # always stop group=0 from seeing this message
 
 
 # ── Script upload (group=-1) ──────────────────────────────────────────────────

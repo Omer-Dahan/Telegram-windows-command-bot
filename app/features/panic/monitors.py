@@ -404,6 +404,9 @@ def _monitor_usb(app: "Application", stop_ev: threading.Event) -> None:
                 "| Select-Object -ExpandProperty InstanceId",
                 timeout=10,
             )
+            if out.startswith("error:"):
+                log.debug("PANIC monitor_usb: skipping iteration (PS error: %s)", out)
+                continue
             current = {line.strip() for line in out.splitlines() if line.strip()}
 
             if baseline is None:
