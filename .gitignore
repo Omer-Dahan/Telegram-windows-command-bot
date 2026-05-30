@@ -80,9 +80,14 @@ $RECYCLE.BIN/
 intruders.json.*
 
 # ===== User data (local to each machine) =====
-data/recordings.json
-data/macros.json
-data/key_builder_state.json
+data/*
+!data/panic_config.json
+!data/.gitkeep
+
 
 # ===== Claude Code (AI assistant settings) =====
 .claude/
+
+# ===== Project Documentation =====
+SOFTWARE_OVERVIEW.md
+

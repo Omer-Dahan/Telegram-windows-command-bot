@@ -23,4 +23,6 @@ def wifi_menu() -> InlineKeyboardMarkup:
         [IB("ℹ Current", callback_data="net:wifi:current")],
         [IB("🌐 Local IP", callback_data="net:ip:local"),
          IB("🌍 Public IP", callback_data="net:ip:public")],
+        [IB("⚙️ Location Settings", callback_data="net:wifi:open_location")],
     ])
+
